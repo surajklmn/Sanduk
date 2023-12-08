@@ -1,11 +1,12 @@
-#include <iostream>
+#include <bits/stdc++.h>
+/*#include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <random>
+#include <random>*/
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 #include "global.h"
