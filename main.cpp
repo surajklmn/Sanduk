@@ -85,7 +85,7 @@ class User
   std::string salt;
 
 public:
-  User(std::string username, std::string password, std::string confirmPassword)
+  User(std::string id, std::string username, std::string password, std::string confirmPassword, std::string salt)
   {
     this->id = Utility::generateUniqueId();
 
@@ -186,8 +186,6 @@ public:
       std::getline(iss, username, ',');
       std::getline(iss, password, ',');
       std::getline(iss, salt, ',');
-      
-      // serialize the input
 
       
     }
