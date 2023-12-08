@@ -186,7 +186,10 @@ public:
       std::getline(iss, username, ',');
       std::getline(iss, password, ',');
       std::getline(iss, salt, ',');
-      this->users.push_back(User(username, password, password));
+      
+      // serialize the input
+
+      
     }
 
     file.close();
