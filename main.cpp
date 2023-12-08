@@ -195,7 +195,6 @@ public:
       std::getline(iss, password, ',');
       std::getline(iss, salt, ',');
 
-      // this->users.push_back(User(username, password, password)); // this code creates new salt and id everytime
       this->users.push_back(User(id, username, password, salt));
     }
   }
