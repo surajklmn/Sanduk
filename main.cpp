@@ -90,7 +90,7 @@ class User
   User(const std::string &id, const std::string &username, const std::string &password, const std::string &salt) : id(id), username(username), password(password), salt(salt) {}
 
 public:
-  User(std::string username, std::string password, std::string confirmPassword)
+  User(std::string id, std::string username, std::string password, std::string confirmPassword, std::string salt)
   {
     this->id = Utility::generateUniqueId();
 
