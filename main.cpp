@@ -10,6 +10,8 @@
 #include <openssl/rand.h>
 #include "global.h"
 
+class UserManager;
+
 namespace Utility
 {
   std::string generateUniqueId()
@@ -84,6 +86,9 @@ class User
   std::string password;
   std::string salt;
 
+  friend UserManager;
+  User(const std::string &id, const std::string &username, const std::string &password, const std::string &salt) : id(id), username(username), password(password), salt(salt) {}
+
 public:
   User(std::string username, std::string password, std::string confirmPassword)
   {
@@ -111,7 +116,8 @@ public:
     this->password = Utility::hashString(password, this->salt);
   }
 
-  std::string getId() const
+  std::string
+  getId() const
   {
     return this->id;
   }
@@ -178,18 +184,20 @@ public:
     }
 
     std::string line;
+
     while (std::getline(file, line))
     {
       std::istringstream iss(line);
       std::string id, username, password, salt;
+
       std::getline(iss, id, ',');
       std::getline(iss, username, ',');
       std::getline(iss, password, ',');
       std::getline(iss, salt, ',');
-      this->users.push_back(User(username, password, password));
-    }
 
-    file.close();
+      // this->users.push_back(User(username, password, password)); // this code creates new salt and id everytime
+      this->users.push_back(User(id, username, password, salt));
+    }
   }
 
   void saveUsers() const
@@ -214,7 +222,20 @@ public:
     this->users.push_back(user);
   }
 
-  const User &getUser(const std::string &username) const
+  const User &getUser(const std::string &id) const
+  {
+    for (const User &user : this->users)
+    {
+      if (user.getId() == id)
+      {
+        return user;
+      }
+    }
+
+    throw CustomException("User not found.");
+  }
+
+  const User &getUserByUsername(const std::string &username) const
   {
     for (const User &user : this->users)
     {
@@ -337,7 +358,7 @@ int main()
     try
     {
       UserManager userManager("users.csv");
-      const User &user = userManager.getUser(username);
+      const User &user = userManager.getUserByUsername(username);
       if (user.getPassword() == Utility::hashString(password, user.getSalt()))
       {
         std::cout << "Login successful." << std::endl;
