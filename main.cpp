@@ -221,6 +221,19 @@ public:
     this->users.push_back(user);
   }
 
+  bool isUsernameTaken(const std::string &username) const
+  {
+    for (const User &user : this->users)
+    {
+      if (user.getUsername() == username)
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   const User &getUser(const std::string &id) const
   {
     for (const User &user : this->users)
@@ -336,6 +349,12 @@ int main()
     try
     {
       UserManager userManager("users.csv");
+
+      if (userManager.isUsernameTaken(username))
+      {
+        throw CustomException("Username already taken.");
+      }
+
       User user(username, password, confirmPassword);
       userManager.addUser(user);
       userManager.saveUsers();
