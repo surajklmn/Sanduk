@@ -41,7 +41,6 @@ namespace Utility
     std::vector<unsigned char> salt(saltSize);
     if (RAND_bytes(salt.data(), static_cast<int>(saltSize)) != 1)
     {
-      // Handle error when generating random bytes
       throw std::runtime_error("Error generating random bytes for salt");
     }
 
@@ -116,8 +115,7 @@ public:
     this->password = Utility::hashString(password, this->salt);
   }
 
-  std::string
-  getId() const
+  std::string getId() const
   {
     return this->id;
   }
