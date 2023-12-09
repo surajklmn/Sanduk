@@ -1,20 +1,35 @@
 #include <bits/stdc++.h>
-/*#include <iostream>
-#include <iomanip>
-#include <sstream>
-#include <fstream>
-#include <stdexcept>
-#include <string>
-#include <vector>
-#include <random>*/
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 #include "global.h"
 
 class UserManager;
+class LoginInfoManager;
 
 namespace Utility
 {
+  std::string generateSimpleId()
+  {
+    std::vector<char> buffer(8);
+    std::random_device rd;
+    std::default_random_engine engine(rd());
+    std::uniform_int_distribution<int> distribution(0, 255);
+
+    for (char &elem : buffer)
+    {
+      elem = static_cast<char>(distribution(engine));
+    }
+
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+    for (unsigned char elem : buffer)
+    {
+      oss << std::setw(2) << static_cast<unsigned>(elem);
+    }
+
+    return oss.str();
+  }
+
   std::string generateUniqueId()
   {
     std::vector<char> buffer(16);
@@ -260,18 +275,156 @@ public:
   }
 };
 
+class LoginInfo
+{
+  std::string id;
+  std::string website;
+  std::string username;
+  std::string password;
+  std::string userId;
+
+  friend LoginInfoManager;
+  LoginInfo(const std::string &id, const std::string &website, const std::string &username, const std::string &password, const std::string &userId) : id(id), website(website), username(username), password(password), userId(userId) {}
+
+public:
+  LoginInfo(std::string website, std::string username, std::string password, std::string userId)
+  {
+    this->id = Utility::generateSimpleId();
+    this->website = website;
+    this->username = username;
+    this->password = password;
+    this->userId = userId;
+  }
+
+  std::string getId() const
+  {
+    return this->id;
+  }
+
+  std::string getWebsite() const
+  {
+    return this->website;
+  }
+
+  std::string getUsername() const
+  {
+    return this->username;
+  }
+
+  std::string getPassword() const
+  {
+    return this->password;
+  }
+
+  std::string getUserId() const
+  {
+    return this->userId;
+  }
+
+  void updatePassword(const std::string &newPassword)
+  {
+    this->password = newPassword;
+  }
+
+  void updateUsername(const std::string &newUsername)
+  {
+    this->username = newUsername;
+  }
+
+  void updateWebsite(const std::string &newWebsite)
+  {
+    this->website = newWebsite;
+  }
+};
+
+class LoginInfoManager
+{
+  std::string filename;
+  std::vector<LoginInfo> loginInfos;
+
+public:
+  LoginInfoManager(std::string filename) : filename(filename)
+  {
+    std::ifstream file(this->filename);
+    if (!file.is_open())
+    {
+      std::ofstream createFile(this->filename);
+      if (!createFile.is_open())
+      {
+        throw CustomException("Error creating file.");
+      }
+      createFile.close();
+    }
+    else
+    {
+      file.close();
+    }
+
+    this->loadLoginInfos();
+  }
+
+  void loadLoginInfos()
+  {
+    std::ifstream file(this->filename);
+
+    if (!file.is_open())
+    {
+      throw CustomException("Error opening file.");
+    }
+
+    std::string line;
+
+    while (std::getline(file, line))
+    {
+      std::istringstream iss(line);
+      std::string id, website, username, password, userId;
+
+      std::getline(iss, id, ',');
+      std::getline(iss, website, ',');
+      std::getline(iss, username, ',');
+      std::getline(iss, password, ',');
+      std::getline(iss, userId, ',');
+
+      this->loginInfos.push_back(LoginInfo(id, website, username, password, userId));
+    }
+  }
+
+  void addLoginInfo(const LoginInfo &loginInfo)
+  {
+    this->loginInfos.push_back(loginInfo);
+  }
+
+  void saveLoginInfos() const
+  {
+    std::ofstream file(this->filename);
+
+    if (!file.is_open())
+    {
+      throw CustomException("Error opening file.");
+    }
+
+    for (const LoginInfo &loginInfo : this->loginInfos)
+    {
+      file << loginInfo.getId() << "," << loginInfo.getWebsite() << "," << loginInfo.getUsername() << "," << loginInfo.getPassword() << "," << loginInfo.getUserId() << "\n";
+    }
+
+    file.close();
+  }
+};
+
 class UserInterface
 {
   static const int MAX_WIDTH = 50;
   static const char DEFAULT_LINE_CHAR = '*';
 
-  static void printLine(char c)
+public:
+  static void printLine(char c = DEFAULT_LINE_CHAR)
   {
     for (int i = 0; i < MAX_WIDTH; i++)
     {
       std::cout << c;
     }
-    std::cout << std::endl;
+    std::cout << '\n';
   }
 
   static void printCenteredText(const std::string &text)
@@ -291,15 +444,14 @@ class UserInterface
       std::cout << ' ';
     }
 
-    std::cout << std::endl;
+    std::cout << '\n';
   }
 
-  static void printText(const std::string &text)
+  static void printText(const std::string &text, bool newLine = true)
   {
-    std::cout << text << std::endl;
+    std::cout << text << (newLine ? '\n' : ' ');
   }
 
-public:
   static void printWelcomeScreen()
   {
     printLine(DEFAULT_LINE_CHAR);
@@ -309,7 +461,7 @@ public:
     printText("1) Create User");
     printText("2) Login");
     printLine(DEFAULT_LINE_CHAR);
-    std::cout << std::endl;
+    std::cout << '\n';
   }
 
   static void printCreateUserScreen()
@@ -331,7 +483,7 @@ int main()
 {
   UserInterface::printWelcomeScreen();
 
-  int choice;
+  int choice, postLoginChoice;
   std::cout << "Enter your choice: ";
   std::cin >> choice;
 
@@ -357,11 +509,11 @@ int main()
       User user(username, password, confirmPassword);
       userManager.addUser(user);
       userManager.saveUsers();
-      std::cout << "User created successfully." << std::endl;
+      std::cout << "User created successfully." << '\n';
     }
     catch (const CustomException &e)
     {
-      std::cout << e.what() << std::endl;
+      std::cout << e.what() << '\n';
     }
   }
   else if (choice == 2)
@@ -378,21 +530,82 @@ int main()
       const User &user = userManager.getUserByUsername(username);
       if (user.getPassword() == Utility::hashString(password, user.getSalt()))
       {
-        std::cout << "Login successful." << std::endl;
+        std::cout << "Login successful." << '\n';
+
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+
+        UserInterface::printLoginScreen();
+        UserInterface::printText("1) List all saved logins");
+        UserInterface::printText("2) Add new login");
+        UserInterface::printText("3) Update website");
+        UserInterface::printText("4) Update username");
+        UserInterface::printText("5) Update password");
+        UserInterface::printText("6) Delete login");
+        UserInterface::printText("7) Exit");
+        UserInterface::printLine();
+        UserInterface::printText("Enter your choice: ", false);
+        std::cin >> postLoginChoice;
+
+        if (postLoginChoice == 1)
+        {
+          std::cout << "List all saved logins" << '\n';
+        }
+        else if (postLoginChoice == 2)
+        {
+          std::string website, username, password;
+          UserInterface::printLine();
+          UserInterface::printCenteredText("Add new login.");
+          UserInterface::printLine();
+          UserInterface::printText("Enter website: ", false);
+          std::cin >> website;
+          UserInterface::printText("Enter username: ", false);
+          std::cin >> username;
+          UserInterface::printText("Enter password: ", false);
+          std::cin >> password;
+
+          loginInfoManager.addLoginInfo(LoginInfo(website, username, password, user.getId()));
+          loginInfoManager.saveLoginInfos();
+
+          std::cout << "Login added successfully." << '\n';
+        }
+        else if (postLoginChoice == 3)
+        {
+          std::cout << "Update website" << '\n';
+        }
+        else if (postLoginChoice == 4)
+        {
+          std::cout << "Update username" << '\n';
+        }
+        else if (postLoginChoice == 5)
+        {
+          std::cout << "Update password" << '\n';
+        }
+        else if (postLoginChoice == 6)
+        {
+          std::cout << "Delete login" << '\n';
+        }
+        else if (postLoginChoice == 7)
+        {
+          std::cout << "Exit" << '\n';
+        }
+        else
+        {
+          std::cout << "Invalid choice." << '\n';
+        }
       }
       else
       {
-        std::cout << "Login failed." << std::endl;
+        std::cout << "Login failed." << '\n';
       }
     }
     catch (const CustomException &e)
     {
-      std::cout << e.what() << std::endl;
+      std::cout << e.what() << '\n';
     }
   }
   else
   {
-    std::cout << "Invalid choice." << std::endl;
+    std::cout << "Invalid choice." << '\n';
   }
 
   return 0;
