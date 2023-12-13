@@ -3,9 +3,8 @@ class UserInterface
 {
   static const int MAX_WIDTH = 50;
   static const char DEFAULT_LINE_CHAR = '*';
-
 public:
-  void printLine(char c = DEFAULT_LINE_CHAR)
+  static void printLine(char c = DEFAULT_LINE_CHAR)
   {
     for (int i = 0; i < MAX_WIDTH; i++)
     {
@@ -14,7 +13,7 @@ public:
     std::cout << '\n';
   }
 
-  void printCenteredText(const std::string &text)
+ static void printCenteredText(const std::string &text)
   {
     int textLength = text.length();
     int padding = (MAX_WIDTH - textLength) / 2;
@@ -34,34 +33,77 @@ public:
     std::cout << '\n';
   }
 
-  void printText(const std::string &text, bool newLine = true)
+  static void printText(const std::string &text, bool newLine = true)
   {
     std::cout << text << (newLine ? '\n' : ' ');
   }
 
-void printWelcomeScreen()
-  {
-    printLine(DEFAULT_LINE_CHAR);
-    printCenteredText("Welcome to Sanduk");
-    printCenteredText("Your Password Manager");
-    printLine(DEFAULT_LINE_CHAR);
-    printText("1) Create User");
-    printText("2) Login");
-    printLine(DEFAULT_LINE_CHAR);
-    std::cout << '\n';
+// void printWelcomeScreen()
+//   {
+//     printLine(DEFAULT_LINE_CHAR);
+//     printCenteredText("Welcome to Sanduk");
+//     printCenteredText("Your Password Manager");
+//     printLine(DEFAULT_LINE_CHAR);
+//     printText("1) Create User");
+//     printText("2) Login");
+//     printLine(DEFAULT_LINE_CHAR);
+//     std::cout << '\n';
+//   }
+
+//   void printCreateUserScreen()
+//   {
+//     printLine(DEFAULT_LINE_CHAR);
+//     printCenteredText("Create User");
+//     printLine(DEFAULT_LINE_CHAR);
+//   }
+
+//   void printLoginScreen()
+//   {
+//     printLine(DEFAULT_LINE_CHAR);
+//     printCenteredText("Login");
+//     printLine(DEFAULT_LINE_CHAR);
+//   }
+};
+
+class WelcomeInterface{
+  int choice;
+  public:
+  void displayHeading(){
+    UserInterface::printLine();
+    UserInterface::printCenteredText("Welcome to Sanduk");
+    UserInterface::printLine();
+
+  }
+  void displayOptions(){
+    UserInterface::printText("1:Create User");
+    UserInterface::printText("2:Login");
+    UserInterface::printText("3:Exit");
+
+  }
+  int setChoice(){
+    UserInterface::printText("Enter you choice: ",false);
+    std::cin >> choice;
+  }
+  bool isChoiceValid(){
+    if(choice < 1 && choice >> 3){
+      return false;
+    }
+  return true;
+  }
+  void setChoiceUntilValid(){
+    do{
+      setChoice();
+
+      if(!isChoiceValid()){
+      UserInterface::printText("Invalid Choice.");
+      }
+    }
+    while(isChoiceValid());
   }
 
-  void printCreateUserScreen()
-  {
-    printLine(DEFAULT_LINE_CHAR);
-    printCenteredText("Create User");
-    printLine(DEFAULT_LINE_CHAR);
-  }
+};
+class LoginInterface{
+  int choice;
 
-  void printLoginScreen()
-  {
-    printLine(DEFAULT_LINE_CHAR);
-    printCenteredText("Login");
-    printLine(DEFAULT_LINE_CHAR);
-  }
+
 };
