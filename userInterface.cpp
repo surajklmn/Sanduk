@@ -38,31 +38,6 @@ public:
     std::cout << text << (newLine ? '\n' : ' ');
   }
 
-// void printWelcomeScreen()
-//   {
-//     printLine(DEFAULT_LINE_CHAR);
-//     printCenteredText("Welcome to Sanduk");
-//     printCenteredText("Your Password Manager");
-//     printLine(DEFAULT_LINE_CHAR);
-//     printText("1) Create User");
-//     printText("2) Login");
-//     printLine(DEFAULT_LINE_CHAR);
-//     std::cout << '\n';
-//   }
-
-//   void printCreateUserScreen()
-//   {
-//     printLine(DEFAULT_LINE_CHAR);
-//     printCenteredText("Create User");
-//     printLine(DEFAULT_LINE_CHAR);
-//   }
-
-//   void printLoginScreen()
-//   {
-//     printLine(DEFAULT_LINE_CHAR);
-//     printCenteredText("Login");
-//     printLine(DEFAULT_LINE_CHAR);
-//   }
 };
 
 class WelcomeInterface{

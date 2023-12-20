@@ -425,6 +425,34 @@ public:
 
     file.close();
   }
+  std::vector<LoginInfo> searchLoginInfos(const std::string &website) const
+  {
+    std::vector<LoginInfo> result;
+
+    for (const LoginInfo &loginInfo : this->loginInfos)
+    {
+      if (loginInfo.getWebsite() == website)
+      {
+        result.push_back(loginInfo);
+      }
+    }
+
+    return result;
+  }
+  std::vector<LoginInfo> getAllSavedWebsite(const std::string &userId) const
+  {
+    std::vector<LoginInfo> result;
+
+    for (const LoginInfo &loginInfo : this->loginInfos)
+    {
+      if (loginInfo.getUserId() == userId)
+      {
+        result.push_back(loginInfo);
+      }
+    }
+
+    return result;
+  }
 };
 
 class UserInterface
@@ -509,15 +537,10 @@ class MainMenuInterface : public UserInterface
 
   void displayMainMenu()
   {
-    printText("1) Search Logins");
+    printText("1) Add Login");
     printText("2) List all logins");
-    printText("3) Add Login");
-    printText("4) View Login");
-    printText("5) Update website");
-    printText("6) Update username");
-    printText("7) Update password");
-    printText("8) Delete login");
-    printText("9) Exit");
+    printText("3) Search Logins");
+    printText("4) Exit");
   }
 
   void askChoice()
@@ -527,7 +550,7 @@ class MainMenuInterface : public UserInterface
       printText("Enter your choice: ", false);
       std::cin >> this->choice;
 
-      if (std::cin.fail() || choice < 1 || choice > 8)
+      if (std::cin.fail() || choice < 1 || choice > 5)
       {
         Utility::clearInputBuffer();
         printText("Invalid choice. Please try again");
@@ -543,15 +566,43 @@ class MainMenuInterface : public UserInterface
   {
     try
     {
-      if (this->choice == 1)
+      if (this->choice == 3)
       {
-        std::cout << "Search Logins" << '\n';
+        printText("Enter website: ", false);
+        std::cin >> this->website;
+
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+        std::vector<LoginInfo> loginInfos = loginInfoManager.searchLoginInfos(this->website);
+
+        if (loginInfos.empty())
+        {
+          printText("No logins found.");
+        }
+        else
+        {
+          printText("Logins found: ");
+          for (const LoginInfo &loginInfo : loginInfos)
+          {
+            printText("Website: " + loginInfo.getWebsite());
+            printText("Username: " + loginInfo.getUsername());
+            printText("Password: " + loginInfo.getPassword());
+            printText("");
+          }
+        }
+        this->run();
       }
       else if (this->choice == 2)
       {
-        std::cout << "List all logins" << '\n';
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+        std::vector<LoginInfo> loginInfos = loginInfoManager.getAllSavedWebsite(currentUserId);
+        printText("Existing websites:");
+        for (const LoginInfo &loginInfo : loginInfos)
+        {
+          printText(loginInfo.getWebsite());
+        }
+        this->run();
       }
-      else if (this->choice == 3)
+      else if (this->choice == 1)
       {
         // add login, ask website, username, password
         printText("Enter website: ", false);
@@ -569,22 +620,6 @@ class MainMenuInterface : public UserInterface
         this->run();
       }
       else if (this->choice == 4)
-      {
-        std::cout << "Update website" << '\n';
-      }
-      else if (this->choice == 5)
-      {
-        std::cout << "Update username" << '\n';
-      }
-      else if (this->choice == 6)
-      {
-        std::cout << "Update password" << '\n';
-      }
-      else if (this->choice == 7)
-      {
-        std::cout << "Delete login" << '\n';
-      }
-      else if (this->choice == 8)
       {
         Utility::exitProgram();
       }
