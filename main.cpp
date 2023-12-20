@@ -6,6 +6,9 @@
 class UserManager;
 class LoginInfoManager;
 
+std::string currentUserId = "";
+std::string currentUserUsername = "";
+
 namespace Utility
 {
   std::string generateSimpleId()
@@ -85,6 +88,18 @@ namespace Utility
     }
 
     return oss.str();
+  }
+
+  void exitProgram()
+  {
+    std::cout << "Exiting..." << '\n';
+    exit(0);
+  }
+
+  void clearInputBuffer()
+  {
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
   }
 }
 
@@ -414,6 +429,7 @@ public:
 
 class UserInterface
 {
+protected:
   static const int MAX_WIDTH = 50;
   static const char DEFAULT_LINE_CHAR = '*';
 
@@ -479,134 +495,311 @@ public:
   }
 };
 
-int main()
+class MainMenuInterface : public UserInterface
 {
-  UserInterface::printWelcomeScreen();
+  int choice;
+  std::string website, username, password;
 
-  int choice, postLoginChoice;
-  std::cout << "Enter your choice: ";
-  std::cin >> choice;
-
-  if (choice == 1)
+  void displayHeading()
   {
-    std::string username, password, confirmPassword;
-    std::cout << "Enter username: ";
-    std::cin >> username;
-    std::cout << "Enter password: ";
-    std::cin >> password;
-    std::cout << "Confirm password: ";
-    std::cin >> confirmPassword;
+    printLine(DEFAULT_LINE_CHAR);
+    printCenteredText("Main Menu");
+    printLine(DEFAULT_LINE_CHAR);
+  }
+
+  void displayMainMenu()
+  {
+    printText("1) Search Logins");
+    printText("2) List all logins");
+    printText("3) Add Login");
+    printText("4) View Login");
+    printText("5) Update website");
+    printText("6) Update username");
+    printText("7) Update password");
+    printText("8) Delete login");
+    printText("9) Exit");
+  }
+
+  void askChoice()
+  {
+    do
+    {
+      printText("Enter your choice: ", false);
+      std::cin >> this->choice;
+
+      if (std::cin.fail() || choice < 1 || choice > 8)
+      {
+        Utility::clearInputBuffer();
+        printText("Invalid choice. Please try again");
+      }
+      else
+      {
+        break;
+      }
+    } while (true);
+  }
+
+  void handleChoice()
+  {
+    try
+    {
+      if (this->choice == 1)
+      {
+        std::cout << "Search Logins" << '\n';
+      }
+      else if (this->choice == 2)
+      {
+        std::cout << "List all logins" << '\n';
+      }
+      else if (this->choice == 3)
+      {
+        // add login, ask website, username, password
+        printText("Enter website: ", false);
+        std::cin >> this->website;
+        printText("Enter username: ", false);
+        std::cin >> this->username;
+        printText("Enter password: ", false);
+        std::cin >> this->password;
+
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+        loginInfoManager.addLoginInfo(LoginInfo(this->website, this->username, this->password, currentUserId));
+        loginInfoManager.saveLoginInfos();
+        printText("Login added successfully.");
+
+        this->run();
+      }
+      else if (this->choice == 4)
+      {
+        std::cout << "Update website" << '\n';
+      }
+      else if (this->choice == 5)
+      {
+        std::cout << "Update username" << '\n';
+      }
+      else if (this->choice == 6)
+      {
+        std::cout << "Update password" << '\n';
+      }
+      else if (this->choice == 7)
+      {
+        std::cout << "Delete login" << '\n';
+      }
+      else if (this->choice == 8)
+      {
+        Utility::exitProgram();
+      }
+    }
+    catch (const std::exception &e)
+    {
+      printText(e.what());
+      this->run(false);
+    }
+  }
+
+public:
+  void run(bool showHeading = true)
+  {
+    if (showHeading)
+      displayHeading();
+
+    try
+    {
+      displayMainMenu();
+      askChoice();
+      handleChoice();
+    }
+    catch (const std::exception &e)
+    {
+      printText(e.what());
+      this->run(false);
+    }
+  }
+};
+
+class CreateUserInterface : public UserInterface
+{
+  std::string username, password, confirmPassword;
+
+  void displayHeading()
+  {
+    printLine(DEFAULT_LINE_CHAR);
+    printCenteredText("Create User");
+    printLine(DEFAULT_LINE_CHAR);
+  }
+
+  void askCredentials()
+  {
+    printText("Enter username: ", false);
+    std::cin >> this->username;
+    printText("Enter password: ", false);
+    std::cin >> this->password;
+    printText("Confirm password: ", false);
+    std::cin >> this->confirmPassword;
+  }
+
+public:
+  void run(bool showHeading = true)
+  {
+    if (showHeading)
+      displayHeading();
+
+    askCredentials();
 
     try
     {
       UserManager userManager("users.csv");
 
-      if (userManager.isUsernameTaken(username))
+      if (userManager.isUsernameTaken(this->username))
       {
         throw CustomException("Username already taken.");
       }
 
-      User user(username, password, confirmPassword);
+      User user(this->username, this->password, this->confirmPassword);
       userManager.addUser(user);
       userManager.saveUsers();
-      std::cout << "User created successfully." << '\n';
+      printText("User created successfully. Re-run the program to login");
     }
     catch (const CustomException &e)
     {
-      std::cout << e.what() << '\n';
+      printText(e.what());
+      this->run(false);
     }
   }
-  else if (choice == 2)
+};
+
+class LoginInterface : public UserInterface
+{
+  std::string username, password;
+
+  void displayHeading()
   {
-    std::string username, password;
-    std::cout << "Enter username: ";
-    std::cin >> username;
-    std::cout << "Enter password: ";
-    std::cin >> password;
+    printLine(DEFAULT_LINE_CHAR);
+    printCenteredText("Login");
+    printLine(DEFAULT_LINE_CHAR);
+  }
+
+  void askCredentials()
+  {
+    printText("Enter username: ", false);
+    std::cin >> this->username;
+    printText("Enter password: ", false);
+    std::cin >> this->password;
+  }
+
+public:
+  void run(bool showHeading = true)
+  {
+    if (showHeading)
+      displayHeading();
+
+    askCredentials();
 
     try
     {
       UserManager userManager("users.csv");
-      const User &user = userManager.getUserByUsername(username);
-      if (user.getPassword() == Utility::hashString(password, user.getSalt()))
+      const User &user = userManager.getUserByUsername(this->username);
+      if (user.getPassword() == Utility::hashString(this->password, user.getSalt()))
       {
-        std::cout << "Login successful." << '\n';
+        currentUserId = user.getId();
+        currentUserUsername = user.getUsername();
+        printText("Login successful.");
 
-        LoginInfoManager loginInfoManager("loginInfos.csv");
-
-        UserInterface::printLoginScreen();
-        UserInterface::printText("1) List all saved logins");
-        UserInterface::printText("2) Add new login");
-        UserInterface::printText("3) Update website");
-        UserInterface::printText("4) Update username");
-        UserInterface::printText("5) Update password");
-        UserInterface::printText("6) Delete login");
-        UserInterface::printText("7) Exit");
-        UserInterface::printLine();
-        UserInterface::printText("Enter your choice: ", false);
-        std::cin >> postLoginChoice;
-
-        if (postLoginChoice == 1)
-        {
-          std::cout << "List all saved logins" << '\n';
-        }
-        else if (postLoginChoice == 2)
-        {
-          std::string website, username, password;
-          UserInterface::printLine();
-          UserInterface::printCenteredText("Add new login.");
-          UserInterface::printLine();
-          UserInterface::printText("Enter website: ", false);
-          std::cin >> website;
-          UserInterface::printText("Enter username: ", false);
-          std::cin >> username;
-          UserInterface::printText("Enter password: ", false);
-          std::cin >> password;
-
-          loginInfoManager.addLoginInfo(LoginInfo(website, username, password, user.getId()));
-          loginInfoManager.saveLoginInfos();
-
-          std::cout << "Login added successfully." << '\n';
-        }
-        else if (postLoginChoice == 3)
-        {
-          std::cout << "Update website" << '\n';
-        }
-        else if (postLoginChoice == 4)
-        {
-          std::cout << "Update username" << '\n';
-        }
-        else if (postLoginChoice == 5)
-        {
-          std::cout << "Update password" << '\n';
-        }
-        else if (postLoginChoice == 6)
-        {
-          std::cout << "Delete login" << '\n';
-        }
-        else if (postLoginChoice == 7)
-        {
-          std::cout << "Exit" << '\n';
-        }
-        else
-        {
-          std::cout << "Invalid choice." << '\n';
-        }
+        MainMenuInterface mainMenuInterface;
+        mainMenuInterface.run();
       }
       else
       {
-        std::cout << "Login failed." << '\n';
+        throw CustomException("Invalid username or password.");
       }
     }
     catch (const CustomException &e)
     {
-      std::cout << e.what() << '\n';
+      printText(e.what());
+      this->run(false);
     }
   }
-  else
+};
+
+class WelcomeInterface : public UserInterface
+{
+  int choice;
+
+  void displayHeading()
   {
-    std::cout << "Invalid choice." << '\n';
+    printLine(DEFAULT_LINE_CHAR);
+    printCenteredText("Welcome to Sanduk");
+    printCenteredText("Your Password Manager");
+    printLine(DEFAULT_LINE_CHAR);
   }
+
+  void displayMenu()
+  {
+    printText("1) Create User");
+    printText("2) Login");
+    printText("3) Exit");
+  }
+
+  void askChoice()
+  {
+    do
+    {
+      printText("Enter your choice: ", false);
+      std::cin >> this->choice;
+
+      if (std::cin.fail() || choice < 1 || choice > 3)
+      {
+        Utility::clearInputBuffer();
+        printText("Invalid choice. Please try again");
+      }
+      else
+      {
+        break;
+      }
+    } while (true);
+  }
+
+  void handleChoice()
+  {
+    if (this->choice == 1)
+    {
+      CreateUserInterface createUserInterface;
+      createUserInterface.run();
+    }
+    else if (this->choice == 2)
+    {
+      LoginInterface loginInterface;
+      loginInterface.run();
+    }
+    else if (this->choice == 3)
+    {
+      Utility::exitProgram();
+    }
+  }
+
+public:
+  void run()
+  {
+    displayHeading();
+    displayMenu();
+    askChoice();
+    handleChoice();
+  }
+};
+
+class App
+{
+public:
+  void run()
+  {
+    WelcomeInterface WelcomeInterface;
+    WelcomeInterface.run();
+  }
+};
+
+int main()
+{
+  App app;
+  app.run();
 
   return 0;
 }
