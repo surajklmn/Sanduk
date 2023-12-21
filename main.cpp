@@ -440,7 +440,7 @@ public:
       file.close();
     }
 
-    this->loadLoginInfos();
+    this->loadLoginInfos(); // Remove the unnecessary argument from the function call.
   }
 
   void loadLoginInfos(const std::string &key)
@@ -606,6 +606,7 @@ class MainMenuInterface : public UserInterface
 
 public:
   MainMenuInterface(const std::string &key) : key(key) {}
+
   void displayHeading()
   {
     printLine(DEFAULT_LINE_CHAR);
@@ -640,7 +641,7 @@ public:
     } while (true);
   }
 
-  void handleChoice()
+  void handleChoice(const std::string &key)
   {
     try
     {
@@ -650,6 +651,7 @@ public:
         std::cin >> this->website;
 
         LoginInfoManager loginInfoManager("loginInfos.csv");
+        loginInfoManager.loadLoginInfos(key);
         std::vector<LoginInfo> loginInfos = loginInfoManager.searchLoginInfos(this->website);
 
         if (loginInfos.empty())
@@ -719,7 +721,7 @@ public:
     {
       displayMainMenu();
       askChoice();
-      handleChoice();
+      handleChoice(key);
     }
     catch (const std::exception &e)
     {
@@ -753,9 +755,7 @@ public:
       this->run(false);
     }
   }
-}
-}
-;
+};
 
 class CreateUserInterface : public UserInterface
 {
