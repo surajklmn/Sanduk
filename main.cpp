@@ -2,6 +2,63 @@
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 #include "global.h"
+// std::string encryptPassword(const std::string &password, const std::string &key)
+// {
+//   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+//   // Set up encryption context
+//   EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
+
+//   int len = password.length() + EVP_MAX_BLOCK_LENGTH;
+//   unsigned char *cipherText = new unsigned char[len];
+
+//   // Encrypt the password
+//   EVP_EncryptUpdate(ctx, cipherText, &len, reinterpret_cast<const unsigned char *>(password.c_str()), password.length());
+//   int cipherLen = len;
+
+//   EVP_EncryptFinal_ex(ctx, cipherText + cipherLen, &len);
+//   cipherLen += len;
+
+//   // Cleanup
+//   EVP_CIPHER_CTX_free(ctx);
+
+//   // Convert to hexadecimal string
+//   std::ostringstream oss;
+//   for (int i = 0; i < cipherLen; ++i)
+//     oss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(cipherText[i]);
+
+//   delete[] cipherText;
+
+//   return oss.str();
+// }
+
+// // Function to decrypt a password
+// std::string decryptPassword(const std::string &encryptedPassword, const std::string &key)
+// {
+//   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+//   // Set up decryption context
+//   EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
+
+//   int len = encryptedPassword.length() / 2;
+//   unsigned char *decryptedText = new unsigned char[len];
+
+//   // Convert from hexadecimal string to binary
+//   for (int i = 0; i < len; ++i)
+//     sscanf(encryptedPassword.substr(i * 2, 2).c_str(), "%02x", &decryptedText[i]);
+
+//   // Decrypt the password
+//   EVP_DecryptUpdate(ctx, decryptedText, &len, decryptedText, len);
+//   int decryptedLen = len;
+
+//   EVP_DecryptFinal_ex(ctx, decryptedText + decryptedLen, &len);
+//   decryptedLen += len;
+
+//   // Cleanup
+//   EVP_CIPHER_CTX_free(ctx);
+
+//   return std::string(reinterpret_cast<char *>(decryptedText), decryptedLen);
+// }
 
 class UserManager;
 class LoginInfoManager;
@@ -350,6 +407,15 @@ public:
   {
     this->website = newWebsite;
   }
+  // std::string getEncryptedPassword(const std::string &key) const
+  // {
+  //   return encryptPassword(password, key);
+  // }
+
+  // void setEncryptedPassword(const std::string &encryptedPassword, const std::string &key)
+  // {
+  //   password = decryptPassword(encryptedPassword, key);
+  // }
 };
 
 class LoginInfoManager
