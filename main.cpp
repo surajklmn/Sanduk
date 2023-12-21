@@ -2,64 +2,8 @@
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 #include "global.h"
-// std::string encryptPassword(const std::string &password, const std::string &key)
-// {
-//   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-
-//   // Set up encryption context
-//   EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
-
-//   int len = password.length() + EVP_MAX_BLOCK_LENGTH;
-//   unsigned char *cipherText = new unsigned char[len];
-
-//   // Encrypt the password
-//   EVP_EncryptUpdate(ctx, cipherText, &len, reinterpret_cast<const unsigned char *>(password.c_str()), password.length());
-//   int cipherLen = len;
-
-//   EVP_EncryptFinal_ex(ctx, cipherText + cipherLen, &len);
-//   cipherLen += len;
-
-//   // Cleanup
-//   EVP_CIPHER_CTX_free(ctx);
-
-//   // Convert to hexadecimal string
-//   std::ostringstream oss;
-//   for (int i = 0; i < cipherLen; ++i)
-//     oss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(cipherText[i]);
-
-//   delete[] cipherText;
-
-//   return oss.str();
-// }
-
-// // Function to decrypt a password
-// std::string decryptPassword(const std::string &encryptedPassword, const std::string &key)
-// {
-//   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-
-//   // Set up decryption context
-//   EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
-
-//   int len = encryptedPassword.length() / 2;
-//   unsigned char *decryptedText = new unsigned char[len];
-
-//   // Convert from hexadecimal string to binary
-//   for (int i = 0; i < len; ++i)
-//     sscanf(encryptedPassword.substr(i * 2, 2).c_str(), "%02x", &decryptedText[i]);
-
-//   // Decrypt the password
-//   EVP_DecryptUpdate(ctx, decryptedText, &len, decryptedText, len);
-//   int decryptedLen = len;
-
-//   EVP_DecryptFinal_ex(ctx, decryptedText + decryptedLen, &len);
-//   decryptedLen += len;
-
-//   // Cleanup
-//   EVP_CIPHER_CTX_free(ctx);
-
-//   return std::string(reinterpret_cast<char *>(decryptedText), decryptedLen);
-// }
-
+#include <openssl/evp.h>
+#include <openssl/aes.h>
 class UserManager;
 class LoginInfoManager;
 
@@ -177,6 +121,11 @@ class User
   User(const std::string &id, const std::string &username, const std::string &password, const std::string &salt) : id(id), username(username), password(password), salt(salt) {}
 
 public:
+  std::string deriveKeyFromMasterPassword(const std::string &masterPassword) const
+  {
+    // In a real-world scenario, use a secure key derivation function (KDF) here
+    return masterPassword;
+  }
   User(std::string username, std::string password, std::string confirmPassword)
   {
     this->id = Utility::generateUniqueId();
@@ -346,6 +295,56 @@ public:
     throw CustomException("User not found.");
   }
 };
+// Function to encrypt a password
+std::string encryptPassword(const std::string &password, const std::string &key)
+{
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+  EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
+
+  int len = password.length() + EVP_MAX_BLOCK_LENGTH;
+  unsigned char *cipherText = new unsigned char[len];
+
+  EVP_EncryptUpdate(ctx, cipherText, &len, reinterpret_cast<const unsigned char *>(password.c_str()), password.length());
+  int cipherLen = len;
+
+  EVP_EncryptFinal_ex(ctx, cipherText + cipherLen, &len);
+  cipherLen += len;
+
+  EVP_CIPHER_CTX_free(ctx);
+
+  std::ostringstream oss;
+  for (int i = 0; i < cipherLen; ++i)
+    oss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(cipherText[i]);
+
+  delete[] cipherText;
+
+  return oss.str();
+}
+
+// Function to decrypt a password
+std::string decryptPassword(const std::string &encryptedPassword, const std::string &key)
+{
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+  EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
+
+  int len = encryptedPassword.length() / 2;
+  unsigned char *decryptedText = new unsigned char[len];
+
+  for (int i = 0; i < len; ++i)
+    sscanf(encryptedPassword.substr(i * 2, 2).c_str(), "%02x", &decryptedText[i]);
+
+  EVP_DecryptUpdate(ctx, decryptedText, &len, decryptedText, len);
+  int decryptedLen = len;
+
+  EVP_DecryptFinal_ex(ctx, decryptedText + decryptedLen, &len);
+  decryptedLen += len;
+
+  EVP_CIPHER_CTX_free(ctx);
+
+  return std::string(reinterpret_cast<char *>(decryptedText), decryptedLen);
+}
 
 class LoginInfo
 {
@@ -407,15 +406,15 @@ public:
   {
     this->website = newWebsite;
   }
-  // std::string getEncryptedPassword(const std::string &key) const
-  // {
-  //   return encryptPassword(password, key);
-  // }
+  std::string getEncryptedPassword(const std::string &key) const
+  {
+    return encryptPassword(password, key);
+  }
 
-  // void setEncryptedPassword(const std::string &encryptedPassword, const std::string &key)
-  // {
-  //   password = decryptPassword(encryptedPassword, key);
-  // }
+  void setEncryptedPassword(const std::string &encryptedPassword, const std::string &key)
+  {
+    password = decryptPassword(encryptedPassword, key);
+  }
 };
 
 class LoginInfoManager
@@ -444,7 +443,7 @@ public:
     this->loadLoginInfos();
   }
 
-  void loadLoginInfos()
+  void loadLoginInfos(const std::string &key)
   {
     std::ifstream file(this->filename);
 
@@ -458,15 +457,15 @@ public:
     while (std::getline(file, line))
     {
       std::istringstream iss(line);
-      std::string id, website, username, password, userId;
+      std::string id, website, username, encryptedPassword, userId;
 
       std::getline(iss, id, ',');
       std::getline(iss, website, ',');
       std::getline(iss, username, ',');
-      std::getline(iss, password, ',');
+      std::getline(iss, encryptedPassword, ',');
       std::getline(iss, userId, ',');
 
-      this->loginInfos.push_back(LoginInfo(id, website, username, password, userId));
+      this->loginInfos.push_back(LoginInfo(id, website, username, encryptedPassword, userId));
     }
   }
 
@@ -484,9 +483,19 @@ public:
       throw CustomException("Error opening file.");
     }
 
+    std::ofstream file(this->filename);
+
+    if (!file.is_open())
+    {
+      throw CustomException("Error opening file.");
+    }
+
     for (const LoginInfo &loginInfo : this->loginInfos)
     {
-      file << loginInfo.getId() << "," << loginInfo.getWebsite() << "," << loginInfo.getUsername() << "," << loginInfo.getPassword() << "," << loginInfo.getUserId() << "\n";
+      file << loginInfo.getId() << "," << loginInfo.getWebsite() << ","
+           << loginInfo.getUsername() << ","
+           << loginInfo.getEncryptedPassword(key) << ","
+           << loginInfo.getUserId() << "\n";
     }
 
     file.close();
@@ -591,9 +600,12 @@ public:
 
 class MainMenuInterface : public UserInterface
 {
+  std::string key;
   int choice;
   std::string website, username, password;
 
+public:
+  MainMenuInterface(const std::string &key) : key(key) {}
   void displayHeading()
   {
     printLine(DEFAULT_LINE_CHAR);
@@ -714,8 +726,36 @@ public:
       printText(e.what());
       this->run(false);
     }
+    try
+    {
+      UserManager userManager("users.csv");
+      const User &user = userManager.getUserByUsername(this->username);
+
+      std::string key = user.deriveKeyFromMasterPassword(this->password);
+
+      if (user.getPassword() == Utility::hashString(this->password, user.getSalt()))
+      {
+        currentUserId = user.getId();
+        currentUserUsername = user.getUsername();
+        printText("Login successful.");
+
+        MainMenuInterface mainMenuInterface(key);
+        mainMenuInterface.run();
+      }
+      else
+      {
+        throw CustomException("Invalid username or password.");
+      }
+    }
+    catch (const CustomException &e)
+    {
+      printText(e.what());
+      this->run(false);
+    }
   }
-};
+}
+}
+;
 
 class CreateUserInterface : public UserInterface
 {
