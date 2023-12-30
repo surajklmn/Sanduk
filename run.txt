@@ -1,1 +1,1 @@
-g++ main.cpp -lcrypto
+g++ main.cpp -lcrypto -lssl

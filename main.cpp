@@ -1,14 +1,28 @@
 #include <bits/stdc++.h>
 #include <openssl/sha.h>
 #include <openssl/rand.h>
-#include "global.h"
-#include <openssl/evp.h>
+
 #include <openssl/aes.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <cstring>
+#include <ostream>
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+
+#include <string>
+
+const int SALT_SIZE = 18;
+
 class UserManager;
 class LoginInfoManager;
 
 std::string currentUserId = "";
 std::string currentUserUsername = "";
+std::string currentMasterPassword = "";
 
 namespace Utility
 {
@@ -91,6 +105,160 @@ namespace Utility
     return oss.str();
   }
 
+  std::string bytesToHexString(const std::vector<uint8_t> &bytes)
+  {
+    std::stringstream stream;
+    for (const auto &byte : bytes)
+    {
+      stream << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
+    }
+    return stream.str();
+  }
+
+  std::vector<uint8_t> hexStringToBytes(const std::string &hexString)
+  {
+    std::vector<uint8_t> bytes;
+    for (size_t i = 0; i < hexString.length(); i += 2)
+    {
+      bytes.push_back(std::stoi(hexString.substr(i, 2), nullptr, 16));
+    }
+    return bytes;
+  }
+
+  std::vector<uint8_t> deriveKey(const std::string &masterPassword, const std::string &salt)
+  {
+    const int iterationCount = 10000;
+    const int keyLength = 32;
+
+    std::vector<uint8_t> derivedKey(keyLength);
+
+    PKCS5_PBKDF2_HMAC(
+        masterPassword.c_str(),
+        masterPassword.length(),
+        reinterpret_cast<const uint8_t *>(salt.c_str()),
+        salt.length(),
+        iterationCount,
+        EVP_sha256(),
+        keyLength,
+        derivedKey.data());
+
+    return derivedKey;
+  }
+
+  std::vector<uint8_t> encryptPassword(const std::string &password, const std::vector<uint8_t> &key)
+  {
+    const int ivSize = 12;
+    const int tagSize = 16;
+
+    std::vector<uint8_t> iv(ivSize);
+    RAND_bytes(iv.data(), iv.size());
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, key.data(), iv.data());
+
+    int ciphertextSize = password.length() + EVP_CIPHER_CTX_block_size(ctx);
+    std::vector<uint8_t> ciphertext(ciphertextSize);
+
+    int len;
+    EVP_EncryptUpdate(ctx, ciphertext.data(), &len, reinterpret_cast<const uint8_t *>(password.c_str()), password.length());
+    ciphertextSize = len;
+
+    EVP_EncryptFinal_ex(ctx, ciphertext.data() + len, &len);
+    ciphertextSize += len;
+
+    std::vector<uint8_t> tag(tagSize);
+    EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, tag.size(), tag.data());
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    std::vector<uint8_t> encryptedPassword(iv);
+    encryptedPassword.insert(encryptedPassword.end(), ciphertext.begin(), ciphertext.begin() + ciphertextSize);
+    encryptedPassword.insert(encryptedPassword.end(), tag.begin(), tag.end());
+
+    return encryptedPassword;
+  }
+
+  std::string decryptPassword(const std::vector<uint8_t> &encryptedPassword, const std::vector<uint8_t> &key)
+  {
+    const int ivSize = 12;
+    const int tagSize = 16;
+
+    std::vector<uint8_t> iv(encryptedPassword.begin(), encryptedPassword.begin() + ivSize);
+    std::vector<uint8_t> ciphertext(encryptedPassword.begin() + ivSize, encryptedPassword.end() - tagSize);
+    std::vector<uint8_t> tag(encryptedPassword.end() - tagSize, encryptedPassword.end());
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr, key.data(), iv.data());
+
+    EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tag.size(), tag.data());
+
+    int plaintextSize = ciphertext.size() + EVP_CIPHER_CTX_block_size(ctx);
+    std::vector<uint8_t> plaintext(plaintextSize);
+
+    int len;
+    EVP_DecryptUpdate(ctx, plaintext.data(), &len, ciphertext.data(), ciphertext.size());
+    plaintextSize = len;
+
+    int ret = EVP_DecryptFinal_ex(ctx, plaintext.data() + len, &len);
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    if (ret > 0)
+    {
+      plaintextSize += len;
+      return std::string(reinterpret_cast<char *>(plaintext.data()), plaintextSize);
+    }
+    else
+    {
+      return "";
+    }
+  }
+
+  bool stringContainsSubstringIgnoreCase(const std::string &str, const std::string &sub)
+  {
+    std::string strCopy = str;
+    std::transform(strCopy.begin(), strCopy.end(), strCopy.begin(), ::tolower);
+    std::string subCopy = sub;
+    std::transform(subCopy.begin(), subCopy.end(), subCopy.begin(), ::tolower);
+
+    return strCopy.find(subCopy) != std::string::npos;
+  }
+
+  std::string generatePassword(int length)
+  {
+    if (length < 3)
+    {
+      throw std::runtime_error("Invalid password length. It must be at least of length 3. We recommend a length of 12 or more.");
+    }
+
+    std::string password = "";
+    std::string letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    std::string numbers = "0123456789";
+    std::string specialCharacters = "!@#$%^&*()_+{}[]:;\"'<>?,./|\\";
+    std::string allCharacters = letters + numbers + specialCharacters;
+
+    std::random_device rd;
+    std::mt19937 generator(rd());
+
+    std::uniform_int_distribution<int> lettersDistribution(0, letters.length() - 1);
+    std::uniform_int_distribution<int> numbersDistribution(0, numbers.length() - 1);
+    std::uniform_int_distribution<int> specialCharactersDistribution(0, specialCharacters.length() - 1);
+    std::uniform_int_distribution<int> allCharactersDistribution(0, allCharacters.length() - 1);
+
+    password += letters[lettersDistribution(generator)];
+    password += numbers[numbersDistribution(generator)];
+    password += specialCharacters[specialCharactersDistribution(generator)];
+
+    for (int i = 0; i < length - 3; i++)
+    {
+      password += allCharacters[allCharactersDistribution(generator)];
+    }
+
+    std::shuffle(password.begin(), password.end(), generator);
+
+    return password;
+  }
+
   void exitProgram()
   {
     std::cout << "Exiting..." << '\n';
@@ -121,11 +289,6 @@ class User
   User(const std::string &id, const std::string &username, const std::string &password, const std::string &salt) : id(id), username(username), password(password), salt(salt) {}
 
 public:
-  std::string deriveKeyFromMasterPassword(const std::string &masterPassword) const
-  {
-    // In a real-world scenario, use a secure key derivation function (KDF) here
-    return masterPassword;
-  }
   User(std::string username, std::string password, std::string confirmPassword)
   {
     this->id = Utility::generateUniqueId();
@@ -170,16 +333,6 @@ public:
   std::string getSalt() const
   {
     return this->salt;
-  }
-
-  void updatePassword(const std::string &newPassword)
-  {
-    this->password = Utility::hashString(newPassword, this->salt);
-  }
-
-  void updateUsername(const std::string &newUsername)
-  {
-    this->username = newUsername;
   }
 };
 
@@ -295,56 +448,6 @@ public:
     throw CustomException("User not found.");
   }
 };
-// Function to encrypt a password
-std::string encryptPassword(const std::string &password, const std::string &key)
-{
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-
-  EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
-
-  int len = password.length() + EVP_MAX_BLOCK_LENGTH;
-  unsigned char *cipherText = new unsigned char[len];
-
-  EVP_EncryptUpdate(ctx, cipherText, &len, reinterpret_cast<const unsigned char *>(password.c_str()), password.length());
-  int cipherLen = len;
-
-  EVP_EncryptFinal_ex(ctx, cipherText + cipherLen, &len);
-  cipherLen += len;
-
-  EVP_CIPHER_CTX_free(ctx);
-
-  std::ostringstream oss;
-  for (int i = 0; i < cipherLen; ++i)
-    oss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(cipherText[i]);
-
-  delete[] cipherText;
-
-  return oss.str();
-}
-
-// Function to decrypt a password
-std::string decryptPassword(const std::string &encryptedPassword, const std::string &key)
-{
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-
-  EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, reinterpret_cast<const unsigned char *>(key.c_str()), NULL);
-
-  int len = encryptedPassword.length() / 2;
-  unsigned char *decryptedText = new unsigned char[len];
-
-  for (int i = 0; i < len; ++i)
-    sscanf(encryptedPassword.substr(i * 2, 2).c_str(), "%02x", &decryptedText[i]);
-
-  EVP_DecryptUpdate(ctx, decryptedText, &len, decryptedText, len);
-  int decryptedLen = len;
-
-  EVP_DecryptFinal_ex(ctx, decryptedText + decryptedLen, &len);
-  decryptedLen += len;
-
-  EVP_CIPHER_CTX_free(ctx);
-
-  return std::string(reinterpret_cast<char *>(decryptedText), decryptedLen);
-}
 
 class LoginInfo
 {
@@ -353,18 +456,24 @@ class LoginInfo
   std::string username;
   std::string password;
   std::string userId;
-
-  friend LoginInfoManager;
-  LoginInfo(const std::string &id, const std::string &website, const std::string &username, const std::string &password, const std::string &userId) : id(id), website(website), username(username), password(password), userId(userId) {}
+  std::string salt;
 
 public:
+  friend LoginInfoManager;
+  LoginInfo(const std::string &id, const std::string &website, const std::string &username, const std::string &password, const std::string &userId, const std::string &salt) : id(id), website(website), username(username), password(password), userId(userId), salt(salt) {}
+
   LoginInfo(std::string website, std::string username, std::string password, std::string userId)
   {
     this->id = Utility::generateSimpleId();
     this->website = website;
     this->username = username;
-    this->password = password;
     this->userId = userId;
+    this->salt = Utility::generateSalt(SALT_SIZE);
+
+    std::vector<uint8_t> key = Utility::deriveKey(currentMasterPassword, this->salt);
+    std::vector<uint8_t> encryptedPassword = Utility::encryptPassword(password, key);
+
+    this->password = Utility::bytesToHexString(encryptedPassword);
   }
 
   std::string getId() const
@@ -392,9 +501,17 @@ public:
     return this->userId;
   }
 
+  std::string getSalt() const
+  {
+    return this->salt;
+  }
+
   void updatePassword(const std::string &newPassword)
   {
-    this->password = newPassword;
+    std::vector<uint8_t> key = Utility::deriveKey(currentMasterPassword, this->salt);
+    std::vector<uint8_t> encryptedPassword = Utility::encryptPassword(newPassword, key);
+
+    this->password = Utility::bytesToHexString(encryptedPassword);
   }
 
   void updateUsername(const std::string &newUsername)
@@ -406,21 +523,12 @@ public:
   {
     this->website = newWebsite;
   }
-  std::string getEncryptedPassword(const std::string &key) const
-  {
-    return encryptPassword(password, key);
-  }
-
-  void setEncryptedPassword(const std::string &encryptedPassword, const std::string &key)
-  {
-    password = decryptPassword(encryptedPassword, key);
-  }
 };
 
 class LoginInfoManager
 {
   std::string filename;
-  std::vector<LoginInfo> loginInfos;
+  std::vector<std::shared_ptr<LoginInfo>> loginInfos;
 
 public:
   LoginInfoManager(std::string filename) : filename(filename)
@@ -440,10 +548,10 @@ public:
       file.close();
     }
 
-    this->loadLoginInfos(); // Remove the unnecessary argument from the function call.
+    this->loadLoginInfos();
   }
 
-  void loadLoginInfos(const std::string &key)
+  void loadLoginInfos()
   {
     std::ifstream file(this->filename);
 
@@ -457,21 +565,22 @@ public:
     while (std::getline(file, line))
     {
       std::istringstream iss(line);
-      std::string id, website, username, encryptedPassword, userId;
+      std::string id, website, username, password, userId, salt;
 
       std::getline(iss, id, ',');
       std::getline(iss, website, ',');
       std::getline(iss, username, ',');
-      std::getline(iss, encryptedPassword, ',');
+      std::getline(iss, password, ',');
       std::getline(iss, userId, ',');
+      std::getline(iss, salt, ',');
 
-      this->loginInfos.push_back(LoginInfo(id, website, username, encryptedPassword, userId));
+      this->loginInfos.push_back(std::make_shared<LoginInfo>(id, website, username, password, userId, salt));
     }
   }
 
   void addLoginInfo(const LoginInfo &loginInfo)
   {
-    this->loginInfos.push_back(loginInfo);
+    this->loginInfos.push_back(std::make_shared<LoginInfo>(loginInfo));
   }
 
   void saveLoginInfos() const
@@ -483,30 +592,24 @@ public:
       throw CustomException("Error opening file.");
     }
 
-    std::ofstream file(this->filename);
-
-    if (!file.is_open())
+    for (const auto &loginInfoPtr : this->loginInfos)
     {
-      throw CustomException("Error opening file.");
-    }
-
-    for (const LoginInfo &loginInfo : this->loginInfos)
-    {
-      file << loginInfo.getId() << "," << loginInfo.getWebsite() << ","
-           << loginInfo.getUsername() << ","
-           << loginInfo.getEncryptedPassword(key) << ","
-           << loginInfo.getUserId() << "\n";
+      const LoginInfo &loginInfo = *loginInfoPtr;
+      file << loginInfo.getId() << "," << loginInfo.getWebsite() << "," << loginInfo.getUsername() << ","
+           << loginInfo.getPassword() << "," << loginInfo.getUserId() << "," << loginInfo.getSalt() << "\n";
     }
 
     file.close();
   }
-  std::vector<LoginInfo> searchLoginInfos(const std::string &website) const
+
+  std::vector<LoginInfo> searchLoginInfos(const std::string &website, const std::string &userId) const
   {
     std::vector<LoginInfo> result;
 
-    for (const LoginInfo &loginInfo : this->loginInfos)
+    for (const auto &loginInfoPtr : this->loginInfos)
     {
-      if (loginInfo.getWebsite() == website)
+      const LoginInfo &loginInfo = *loginInfoPtr;
+      if (Utility::stringContainsSubstringIgnoreCase(loginInfo.getWebsite(), website) && loginInfo.getUserId() == userId)
       {
         result.push_back(loginInfo);
       }
@@ -514,12 +617,14 @@ public:
 
     return result;
   }
+
   std::vector<LoginInfo> getAllSavedWebsite(const std::string &userId) const
   {
     std::vector<LoginInfo> result;
 
-    for (const LoginInfo &loginInfo : this->loginInfos)
+    for (const auto &loginInfoPtr : this->loginInfos)
     {
+      const LoginInfo &loginInfo = *loginInfoPtr;
       if (loginInfo.getUserId() == userId)
       {
         result.push_back(loginInfo);
@@ -527,6 +632,33 @@ public:
     }
 
     return result;
+  }
+
+  const std::shared_ptr<LoginInfo> getLoginInfo(const std::string &id) const
+  {
+    for (const auto &loginInfo : this->loginInfos)
+    {
+      if (loginInfo->getId() == id)
+      {
+        return loginInfo;
+      }
+    }
+
+    throw CustomException("Login info not found.");
+  }
+
+  void deleteLoginInfo(const std::string &id)
+  {
+    for (const auto &loginInfo : this->loginInfos)
+    {
+      if (loginInfo->getId() == id)
+      {
+        this->loginInfos.erase(std::remove(this->loginInfos.begin(), this->loginInfos.end(), loginInfo), this->loginInfos.end());
+        return;
+      }
+    }
+
+    throw CustomException("Login info not found.");
   }
 };
 
@@ -600,12 +732,8 @@ public:
 
 class MainMenuInterface : public UserInterface
 {
-  std::string key;
   int choice;
   std::string website, username, password;
-
-public:
-  MainMenuInterface(const std::string &key) : key(key) {}
 
   void displayHeading()
   {
@@ -619,7 +747,55 @@ public:
     printText("1) Add Login");
     printText("2) List all logins");
     printText("3) Search Logins");
-    printText("4) Exit");
+    printText("4) Update Website");
+    printText("5) Update Username");
+    printText("6) Update Password");
+    printText("7) Delete Login");
+    printText("8) Generate Password");
+    printText("9) Exit");
+  }
+
+  void printBorderedTableAllLoginHeader()
+  {
+    std::cout << "+------------------+------------------+------------------+------------------+\n";
+    std::cout << "| ID               | Website          | Username         | Password         |\n";
+    std::cout << "+------------------+------------------+------------------+------------------+\n";
+  }
+
+  void printBorderedTableAllLoginFooter()
+  {
+    std::cout << "+------------------+------------------+------------------+------------------+\n\n";
+  }
+
+  void printBorderedTableAllLogin(const LoginInfo &loginInfo)
+  {
+    std::string decryptedPassword = Utility::decryptPassword(Utility::hexStringToBytes(loginInfo.getPassword()), Utility::deriveKey(currentMasterPassword, loginInfo.getSalt()));
+
+    std::cout << "| " << std::setw(16) << loginInfo.getId() << " | "
+              << std::setw(16) << loginInfo.getWebsite() << " | "
+              << std::setw(16) << loginInfo.getUsername() << " | " << std::setw(16) << decryptedPassword << " |\n";
+  }
+
+  void printBorderedTableSearchedLoginHeader()
+  {
+    std::cout << "+------------------+------------------+------------------+------------------+\n";
+    std::cout << "| ID               | Website          | Username         | Password         |\n";
+    std::cout << "+------------------+------------------+------------------+------------------+\n";
+  }
+
+  void printBorderedTableSearchedLoginFooter()
+  {
+    std::cout << "+------------------+------------------+------------------+------------------+\n\n";
+  }
+
+  void printBorderedTableSearchedLogin(const LoginInfo &loginInfo)
+  {
+    std::string decryptedPassword = Utility::decryptPassword(Utility::hexStringToBytes(loginInfo.getPassword()), Utility::deriveKey(currentMasterPassword, loginInfo.getSalt()));
+
+    std::cout << "| " << std::setw(16) << loginInfo.getId() << " | "
+              << std::setw(16) << loginInfo.getWebsite() << " | "
+              << std::setw(16) << loginInfo.getUsername() << " | "
+              << std::setw(16) << decryptedPassword << " |\n";
   }
 
   void askChoice()
@@ -629,7 +805,7 @@ public:
       printText("Enter your choice: ", false);
       std::cin >> this->choice;
 
-      if (std::cin.fail() || choice < 1 || choice > 5)
+      if (std::cin.fail() || choice < 1 || choice > 9)
       {
         Utility::clearInputBuffer();
         printText("Invalid choice. Please try again");
@@ -641,7 +817,7 @@ public:
     } while (true);
   }
 
-  void handleChoice(const std::string &key)
+  void handleChoice()
   {
     try
     {
@@ -651,8 +827,7 @@ public:
         std::cin >> this->website;
 
         LoginInfoManager loginInfoManager("loginInfos.csv");
-        loginInfoManager.loadLoginInfos(key);
-        std::vector<LoginInfo> loginInfos = loginInfoManager.searchLoginInfos(this->website);
+        std::vector<LoginInfo> loginInfos = loginInfoManager.searchLoginInfos(this->website, currentUserId);
 
         if (loginInfos.empty())
         {
@@ -660,31 +835,40 @@ public:
         }
         else
         {
-          printText("Logins found: ");
+          printText("Logins found: \n");
+          printBorderedTableSearchedLoginHeader();
           for (const LoginInfo &loginInfo : loginInfos)
           {
-            printText("Website: " + loginInfo.getWebsite());
-            printText("Username: " + loginInfo.getUsername());
-            printText("Password: " + loginInfo.getPassword());
-            printText("");
+            printBorderedTableSearchedLogin(loginInfo);
           }
         }
+        printBorderedTableSearchedLoginFooter();
         this->run();
       }
       else if (this->choice == 2)
       {
         LoginInfoManager loginInfoManager("loginInfos.csv");
         std::vector<LoginInfo> loginInfos = loginInfoManager.getAllSavedWebsite(currentUserId);
-        printText("Existing websites:");
-        for (const LoginInfo &loginInfo : loginInfos)
+
+        if (loginInfos.empty())
         {
-          printText(loginInfo.getWebsite());
+          printText("No logins found.");
         }
+        else
+        {
+          printText("Existing Logins:\n");
+          printBorderedTableAllLoginHeader();
+          for (const LoginInfo &loginInfo : loginInfos)
+          {
+            printBorderedTableAllLogin(loginInfo);
+          }
+          printBorderedTableAllLoginFooter();
+        }
+
         this->run();
       }
       else if (this->choice == 1)
       {
-        // add login, ask website, username, password
         printText("Enter website: ", false);
         std::cin >> this->website;
         printText("Enter username: ", false);
@@ -700,6 +884,79 @@ public:
         this->run();
       }
       else if (this->choice == 4)
+      {
+        printText("Enter Login info ID: ", false);
+        std::string id, website;
+        std::cin >> id;
+
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+        const std::shared_ptr<LoginInfo> &loginInfoPtr = loginInfoManager.getLoginInfo(id);
+
+        printText("Enter new website: ", false);
+        std::cin >> website;
+
+        loginInfoPtr->updateWebsite(website);
+        loginInfoManager.saveLoginInfos();
+        printText("Website updated successfully.");
+        this->run();
+      }
+      else if (this->choice == 5)
+      {
+        printText("Enter Login info ID: ", false);
+        std::string id, username;
+        std::cin >> id;
+
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+        const std::shared_ptr<LoginInfo> &loginInfoPtr = loginInfoManager.getLoginInfo(id);
+
+        printText("Enter new username: ", false);
+        std::cin >> username;
+
+        loginInfoPtr->updateUsername(username);
+        loginInfoManager.saveLoginInfos();
+        printText("Username updated successfully.");
+        this->run();
+      }
+      else if (this->choice == 6)
+      {
+        printText("Enter Login info ID: ", false);
+        std::string id, password;
+        std::cin >> id;
+
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+        const std::shared_ptr<LoginInfo> &loginInfoPtr = loginInfoManager.getLoginInfo(id);
+
+        printText("Enter new password: ", false);
+        std::cin >> password;
+
+        loginInfoPtr->updatePassword(password);
+        loginInfoManager.saveLoginInfos();
+        printText("Password updated successfully.");
+        this->run();
+      }
+      else if (this->choice == 7)
+      {
+        printText("Enter Login info ID: ", false);
+        std::string id;
+        std::cin >> id;
+
+        LoginInfoManager loginInfoManager("loginInfos.csv");
+        loginInfoManager.deleteLoginInfo(id);
+        loginInfoManager.saveLoginInfos();
+        printText("Login deleted successfully.");
+        this->run();
+      }
+      else if (this->choice == 8)
+      {
+        printText("Enter length of password: ", false);
+        int length;
+        std::cin >> length;
+        Utility::clearInputBuffer();
+
+        printText("Generated password: " + Utility::generatePassword(length));
+        this->run();
+      }
+      else if (this->choice == 9)
       {
         Utility::exitProgram();
       }
@@ -721,35 +978,9 @@ public:
     {
       displayMainMenu();
       askChoice();
-      handleChoice(key);
+      handleChoice();
     }
     catch (const std::exception &e)
-    {
-      printText(e.what());
-      this->run(false);
-    }
-    try
-    {
-      UserManager userManager("users.csv");
-      const User &user = userManager.getUserByUsername(this->username);
-
-      std::string key = user.deriveKeyFromMasterPassword(this->password);
-
-      if (user.getPassword() == Utility::hashString(this->password, user.getSalt()))
-      {
-        currentUserId = user.getId();
-        currentUserUsername = user.getUsername();
-        printText("Login successful.");
-
-        MainMenuInterface mainMenuInterface(key);
-        mainMenuInterface.run();
-      }
-      else
-      {
-        throw CustomException("Invalid username or password.");
-      }
-    }
-    catch (const CustomException &e)
     {
       printText(e.what());
       this->run(false);
@@ -843,6 +1074,7 @@ public:
       {
         currentUserId = user.getId();
         currentUserUsername = user.getUsername();
+        currentMasterPassword = user.getPassword();
         printText("Login successful.");
 
         MainMenuInterface mainMenuInterface;

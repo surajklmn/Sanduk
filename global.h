@@ -1,1 +1,0 @@
-const int SALT_SIZE = 18;
