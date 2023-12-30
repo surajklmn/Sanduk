@@ -5,4 +5,4 @@
 - Any modern C++ compiler like GNU, Visual Studio, Clang
 - OpenSSL
 
-To Run the program: `g++ main.cpp -lcrypto`
+To Run the program: `make main`
