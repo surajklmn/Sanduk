@@ -3,6 +3,5 @@ a.out
 main.exe
 main.out
 main
-users.csv
-loginInfos.csv
+*.csv
 .vscode
